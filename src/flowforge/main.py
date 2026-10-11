@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+
+from flowforge.database import check_database_connection
 
 app = FastAPI(
     title="FlowForge",
@@ -12,4 +14,18 @@ def health_check() -> dict[str, str]:
     return {
         "status": "ok",
         "service": "flowforge-api",
+    }
+
+
+@app.get("/ready", tags=["Health"])
+def readiness_check() -> dict[str, str]:
+    if not check_database_connection():
+        raise HTTPException(
+            status_code=503,
+            detail="Database is unavailable",
+        )
+
+    return {
+        "status": "ready",
+        "database": "connected",
     }

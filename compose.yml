@@ -5,8 +5,13 @@ services:
     build:
       context: .
       dockerfile: infra/docker/api.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -20,9 +25,9 @@ services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_DB: flowforge
-      POSTGRES_USER: flowforge
-      POSTGRES_PASSWORD: flowforge_dev_only
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "127.0.0.1:5434:5432"
     volumes:
@@ -30,7 +35,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U flowforge -d flowforge
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
       interval: 5s
       timeout: 3s
       retries: 5
