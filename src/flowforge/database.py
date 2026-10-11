@@ -1,30 +1,23 @@
-import os
+from functools import lru_cache
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-
-def get_database_url() -> str:
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL is not configured")
-    return database_url
+from flowforge.config import get_settings
 
 
-def create_database_engine() -> Engine:
+@lru_cache(maxsize=1)
+def get_database_engine() -> Engine:
     return create_engine(
-        get_database_url(),
+        get_settings().database_url,
         pool_pre_ping=True,
     )
 
 
 def check_database_connection() -> bool:
-    engine = create_database_engine()
     try:
-        with engine.connect() as connection:
+        with get_database_engine().connect() as connection:
             connection.execute(text("SELECT 1"))
         return True
     except Exception:
         return False
-    finally:
-        engine.dispose()
