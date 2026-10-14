@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from flowforge.db.session import get_db_session
 from flowforge.api.customers import router as customers_router
+from flowforge.api.products import router as products_router
+from flowforge.api.categories import router as categories_router
 
 app = FastAPI(
     title="FlowForge",
@@ -15,6 +17,8 @@ app = FastAPI(
 )
 
 app.include_router(customers_router)
+app.include_router(products_router)
+app.include_router(categories_router)
 
 
 @app.get("/health", tags=["Health"])
