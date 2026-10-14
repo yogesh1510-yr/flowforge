@@ -1,9 +1,11 @@
+"""Database engine and connectivity helpers."""
+
 from functools import lru_cache
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from flowforge.config import get_settings
+from flowforge.core.config import get_settings
 
 
 @lru_cache(maxsize=1)

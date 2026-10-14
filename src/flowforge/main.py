@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 
-from flowforge.database import check_database_connection
+from flowforge.db.engine import check_database_connection
 
 app = FastAPI(
     title="FlowForge",
