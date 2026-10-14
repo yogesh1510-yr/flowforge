@@ -1,12 +1,20 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 
 from flowforge.db.engine import check_database_connection
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from flowforge.db.session import get_db_session
+from flowforge.api.customers import router as customers_router
 
 app = FastAPI(
     title="FlowForge",
     description="Real-Time Order Intelligence Platform",
     version="0.1.0",
 )
+
+app.include_router(customers_router)
 
 
 @app.get("/health", tags=["Health"])
@@ -29,3 +37,16 @@ def readiness_check() -> dict[str, str]:
         "status": "ready",
         "database": "connected",
     }
+
+@app.get("/db-check")
+def db_check(
+    session: Session = Depends(get_db_session),
+) -> dict[str, str]:
+    try:
+        session.execute(text("SELECT 1"))
+        return {"status": "ok", "database": "connected"}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Database query failed",
+        ) from exc
