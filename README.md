@@ -20,3 +20,7 @@ Phase 1 — Repository and container foundation.
 ## Getting Started
 
 Setup and execution instructions will be added as the project develops.
+
+## Architecture Documentation
+
+- [Database Architecture Plan](docs/database-architecture-plan.pdf) — Target database schema, table relationships, architectural decisions, implementation roadmap, and migration checklist.
