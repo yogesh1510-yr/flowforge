@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from enum import Enum
 
 from sqlalchemy import (
     CHAR,
@@ -34,7 +35,7 @@ from flowforge.core.enums import (
 )
 
 
-def enum_values(enum_class: type) -> str:
+def enum_values(enum_class: type[Enum]) -> str:
     """Return enum values as a SQL-safe, quoted list."""
     return ", ".join(
         "'" + str(member.value).replace("'", "''") + "'"

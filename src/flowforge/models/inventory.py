@@ -1,9 +1,11 @@
 """SQLAlchemy models for the FlowForge platform."""
 
 import uuid
+from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from enum import Enum
 
 from sqlalchemy import (
     CHAR,
@@ -34,11 +36,10 @@ from flowforge.core.enums import (
 )
 
 
-def enum_values(enum_class: type) -> str:
+def enum_values(enum_class: type[Enum]) -> str:
     """Return enum values as a SQL-safe, quoted list."""
     return ", ".join(
-        "'" + str(member.value).replace("'", "''") + "'"
-        for member in enum_class
+        "'" + str(member.value).replace("'", "''") + "'" for member in enum_class
     )
 
 
@@ -164,8 +165,15 @@ class InventoryMovement(Base):
         String(30), nullable=False
     )
     quantity_delta: Mapped[int] = mapped_column(Integer, nullable=False)
-    reference_type: Mapped[str | None] = mapped_column(String(30))
-    reference_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
+    reference_type: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    reference_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+    )
     reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -188,4 +196,3 @@ class InventoryMovement(Base):
 # ---------------------------------------------------------------------------
 # Order event history
 # ---------------------------------------------------------------------------
-
