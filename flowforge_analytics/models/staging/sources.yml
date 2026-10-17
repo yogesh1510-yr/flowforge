@@ -1,0 +1,7 @@
+version: 2
+
+sources:
+  - name: flowforge_analytics
+    schema: analytics
+    tables:
+      - name: order_intelligence_test

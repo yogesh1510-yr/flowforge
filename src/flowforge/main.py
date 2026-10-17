@@ -13,6 +13,7 @@ from flowforge.api.warehouses import router as warehouses_router
 from flowforge.api.inventory import router as inventory_router
 from flowforge.api.reservations import router as reservations_router
 from flowforge.api.orders import router as orders_router
+from flowforge.api.order_intelligence import router as order_intelligence_router
 from flowforge.api.fulfillment import router as fulfillment_router
 from flowforge.api.dashboard import router as dashboard_router
 from flowforge.core.observability import RequestLoggingMiddleware
@@ -78,6 +79,7 @@ app.include_router(warehouses_router)
 app.include_router(inventory_router)
 app.include_router(reservations_router)
 app.include_router(orders_router)
+app.include_router(order_intelligence_router)
 app.include_router(fulfillment_router)
 app.include_router(dashboard_router)
 app.add_middleware(RequestLoggingMiddleware)
