@@ -1,0 +1,30 @@
+services:
+  spark:
+    image: apache/spark:3.5.1
+    working_dir: /opt/spark-app
+    depends_on:
+      - kafka
+      - postgres
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: flowforge.public.orders
+      SPARK_CHECKPOINT: /tmp/flowforge-spark-checkpoints/orders
+      SINK_DB_HOST: postgres
+      SINK_DB_PORT: "5432"
+      SINK_DB_NAME: ${POSTGRES_DB:-flowforge}
+      SINK_DB_USER: ${POSTGRES_USER:-flowforge}
+      SINK_DB_PASSWORD: ${POSTGRES_PASSWORD:-flowforge_dev_only}
+    user: "0:0"
+    volumes:
+      - ./src/flowforge/streaming/spark_cdc_sink.py:/opt/spark-app/spark_cdc_sink.py:ro
+      - spark_checkpoints:/tmp/flowforge-spark-checkpoints
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[*]
+      - --packages
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.postgresql:postgresql:42.7.3
+      - /opt/spark-app/spark_cdc_sink.py
+
+volumes:
+  spark_checkpoints:
