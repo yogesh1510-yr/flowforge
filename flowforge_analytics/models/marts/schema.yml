@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: Latest CDC projection of each order, including soft-delete state.
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']
+      - name: order_value
+        tests: [not_null]
+      - name: is_deleted
+        tests: [not_null]
+
+  - name: agg_orders_by_status
+    description: Order counts and value grouped by current status and currency.
+    columns:
+      - name: order_status
+        tests: [not_null]
+      - name: currency
+        tests: [not_null]
