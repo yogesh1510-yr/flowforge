@@ -343,6 +343,52 @@ The local ports are:
 
 The PostgreSQL container uses a named Docker volume so that ordinary container recreation does not remove persisted data.
 
+### CI/CD deployment
+
+The GitHub Actions workflow runs the Python test suite, validates the Compose
+configuration, and builds the service images for pushes and pull requests. A
+manual run adds a deployment dropdown with `dev`, `non-prod`, and `prod`; the
+selected deployment runs only after CI succeeds.
+
+Deployment uses SSH and Docker Compose on a Linux host. Configure the following
+GitHub Environments under **Settings → Environments**, creating names that match
+the dropdown exactly:
+
+| Environment variable or secret | Purpose |
+|---|---|
+| `DEPLOY_HOST` (variable) | Deployment server hostname or IP |
+| `DEPLOY_PORT` (variable) | SSH port, commonly `22` |
+| `DEPLOY_USER` (variable) | SSH user allowed to run Docker Compose |
+| `DEPLOY_PATH` (variable) | Environment-specific checkout directory |
+| `DEPLOY_SSH_KEY` (secret) | Private key for the deployment user |
+| `DEPLOY_KNOWN_HOSTS` (secret) | Pinned SSH host key line(s) for the server |
+
+The deployment host needs Docker Engine with the Compose plugin, Bash, and
+Python 3. Prepare a host-managed `.env` file in each environment's `DEPLOY_PATH`;
+the workflow preserves it when syncing source. Set `FLOWFORGE_ENV` to the
+matching environment, configure database and Airflow credentials, and choose
+available host ports. Set unique passwords of at least 24 characters for
+`POSTGRES_PASSWORD` and `AIRFLOW_ADMIN_PASSWORD`; use URL-safe characters in the
+database password. Do not put these values in GitHub workflow files or commit
+the host `.env` file.
+
+The Compose project and its named volumes are isolated per selected environment.
+If environments share a host, give them different `DEPLOY_PATH` values and
+different values for `API_HOST_PORT`, `POSTGRES_HOST_PORT`, `KAFKA_HOST_PORT`,
+`CONNECT_HOST_PORT`, and `AIRFLOW_HOST_PORT` in each host `.env`. Set
+`KAFKA_ADVERTISED_HOST` to the host name clients use to reach Kafka. In
+production, the API binds to localhost; put it behind the host's TLS reverse
+proxy. Swagger, ReDoc, and the OpenAPI schema are disabled when
+`FLOWFORGE_ENV=prod`. Configure required reviewers and restrict allowed branches
+for the `prod` GitHub Environment (typically to `main`) before enabling
+production deployments.
+
+To deploy, open **Actions → FlowForge CI/CD → Run workflow**, select the branch,
+choose `dev`, `non-prod`, or `prod`, and start the run. The workflow runs tests
+and builds the images before copying the release to the selected host. The
+remote deployment applies Alembic migrations through Compose and waits for the
+API readiness endpoint. It does not seed demo data.
+
 ### 5. Verify the API
 
 ```bash
@@ -762,7 +808,7 @@ The credentials shown in local development examples are not suitable for product
 - [x] Add scheduled data quality checks
 - [ ] Improve metrics, tracing, and alerting
 - [ ] Define backup and recovery procedures
-- [ ] Add deployment automation and integration environments
+- [x] Add environment-selectable CI/CD deployment automation
 - [ ] Document operational service-level objectives
 
 The roadmap describes intended work. Individual milestones should be marked complete only after their implementation and verification.

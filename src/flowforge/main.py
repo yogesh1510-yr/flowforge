@@ -20,6 +20,7 @@ from flowforge.core.observability import RequestLoggingMiddleware
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+import os
 
 import logging
 
@@ -65,11 +66,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         dispose_database_engine()
 
 
+docs_enabled = os.getenv("FLOWFORGE_ENV", "dev").strip().lower() != "prod"
+
 app = FastAPI(
     title="FlowForge",
     description="Real-Time Order Intelligence Platform",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None,
 )
 
 app.include_router(customers_router)
