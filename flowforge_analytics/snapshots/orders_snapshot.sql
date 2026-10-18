@@ -18,6 +18,6 @@ select
     total_amount,
     created_at,
     updated_at
-from {{ source('flowforge_analytics', 'order_intelligence_test') }}
+from {{ source('flowforge_analytics', 'order_state') }}
 
 {% endsnapshot %}

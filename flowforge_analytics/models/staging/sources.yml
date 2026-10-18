@@ -4,4 +4,25 @@ sources:
   - name: flowforge_analytics
     schema: analytics
     tables:
-      - name: order_intelligence_test
+      - name: order_state
+        freshness:
+          warn_after: {count: 30, period: minute}
+          error_after: {count: 120, period: minute}
+        loaded_at_field: projected_at
+        columns:
+          - name: order_id
+            tests: [not_null, unique]
+          - name: status
+            tests:
+              - accepted_values:
+                  values: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']
+          - name: total_amount
+            tests: [not_null]
+
+  - name: flowforge_operational
+    schema: public
+    tables:
+      - name: orders
+        columns:
+          - name: id
+            tests: [not_null, unique]

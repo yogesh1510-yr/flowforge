@@ -22,8 +22,8 @@ GET_BY_ID_SQL = text("""
         source_partition,
         source_offset,
         projected_at
-    FROM analytics.order_intelligence_test
-    WHERE order_id = :order_id
+    FROM analytics.order_state
+    WHERE order_id = :order_id AND is_deleted = false
 """)
 
 
@@ -46,8 +46,8 @@ GET_BY_NUMBER_SQL = text("""
         source_partition,
         source_offset,
         projected_at
-    FROM analytics.order_intelligence_test
-    WHERE order_number = :order_number
+    FROM analytics.order_state
+    WHERE order_number = :order_number AND is_deleted = false
 """)
 
 
@@ -72,7 +72,7 @@ def list_orders(
     status: str | None = None,
     order_number: str | None = None,
 ):
-    conditions = []
+    conditions = ["is_deleted = false"]
     params = {
         "limit": limit,
         "offset": offset,
@@ -107,7 +107,7 @@ def list_orders(
             source_partition,
             source_offset,
             projected_at
-        FROM analytics.order_intelligence_test
+        FROM analytics.order_state
         {where_clause}
         ORDER BY updated_at DESC, order_number ASC
         LIMIT :limit OFFSET :offset
@@ -121,19 +121,22 @@ SUMMARY_TOTALS_SQL = text("""
         COUNT(*) AS total_orders,
         MAX(projected_at) AS latest_projection_at,
         MAX(updated_at) AS latest_order_updated_at
-    FROM analytics.order_intelligence_test
+    FROM analytics.order_state
+    WHERE is_deleted = false
 """)
 
 SUMMARY_STATUS_SQL = text("""
     SELECT status, COUNT(*) AS order_count
-    FROM analytics.order_intelligence_test
+    FROM analytics.order_state
+    WHERE is_deleted = false
     GROUP BY status
     ORDER BY status
 """)
 
 SUMMARY_CURRENCY_SQL = text("""
     SELECT currency, SUM(total_amount) AS total_value
-    FROM analytics.order_intelligence_test
+    FROM analytics.order_state
+    WHERE is_deleted = false
     GROUP BY currency
     ORDER BY currency
 """)

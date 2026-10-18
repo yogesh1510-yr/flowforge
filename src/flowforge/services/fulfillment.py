@@ -86,10 +86,53 @@ def confirm_order(
         # Lock all relevant inventory rows before planning allocations.
         product_ids = {item.product_id for item in items}
 
+        # Direct reservations may already cover part or all of an item. Lock
+        # those records before inventory rows, matching the release/ship lock
+        # order and avoiding duplicate reservations during confirmation.
+        existing_reservations = list(
+            session.scalars(
+                select(InventoryReservation)
+                .where(
+                    InventoryReservation.order_item_id.in_(
+                        [item.id for item in items]
+                    ),
+                    InventoryReservation.status == ReservationStatus.RESERVED,
+                )
+                .order_by(
+                    InventoryReservation.inventory_id,
+                    InventoryReservation.id,
+                )
+                .with_for_update()
+            ).all()
+        )
+        reserved_by_item = {}
+        for reservation in existing_reservations:
+            reserved_by_item[reservation.order_item_id] = (
+                reserved_by_item.get(reservation.order_item_id, 0)
+                + reservation.quantity
+            )
+        for item in items:
+            if reserved_by_item.get(item.id, 0) > item.quantity:
+                raise FulfillmentConflictError(
+                    f"Existing reservations exceed order item {item.id} quantity"
+                )
+
         inventory_rows = inventory_repository.list_inventory_for_products_for_update(
             session,
             product_ids=product_ids,
         )
+        inventory_by_id = {inventory.id: inventory for inventory in inventory_rows}
+        item_by_id = {item.id: item for item in items}
+
+        if any(
+            reservation.inventory_id not in inventory_by_id
+            or inventory_by_id[reservation.inventory_id].product_id
+            != item_by_id[reservation.order_item_id].product_id
+            for reservation in existing_reservations
+        ):
+            raise FulfillmentConflictError(
+                "An existing reservation does not match its order item product"
+            )
 
         inventory_by_product: dict[UUID, list] = {}
 
@@ -107,7 +150,7 @@ def confirm_order(
 
         # Plan every allocation before creating any reservations.
         for item in items:
-            remaining_quantity = item.quantity
+            remaining_quantity = item.quantity - reserved_by_item.get(item.id, 0)
 
             for inventory in inventory_by_product.get(item.product_id, []):
                 available = remaining_available[inventory.id]
@@ -140,7 +183,16 @@ def confirm_order(
                 )
 
         # Apply the complete allocation plan in this transaction.
-        event_allocations = []
+        event_allocations = [
+            {
+                "order_item_id": str(reservation.order_item_id),
+                "reservation_id": str(reservation.id),
+                "inventory_id": str(reservation.inventory_id),
+                "quantity": reservation.quantity,
+                "source": "existing",
+            }
+            for reservation in existing_reservations
+        ]
 
         for allocation in allocations:
             item = allocation["item"]
@@ -164,6 +216,7 @@ def confirm_order(
                     "warehouse_id": str(inventory.warehouse_id),
                     "product_id": str(item.product_id),
                     "quantity": quantity,
+                    "source": "confirmation",
                 }
             )
 

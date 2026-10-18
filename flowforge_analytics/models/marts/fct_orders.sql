@@ -2,7 +2,7 @@
     config(
         materialized='incremental',
         unique_key='order_id',
-        incremental_strategy='merge'
+        incremental_strategy='delete+insert'
     )
 }}
 
@@ -20,6 +20,7 @@ select
     created_at as order_created_at,
     updated_at as order_last_updated_at,
     order_age_seconds as order_update_elapsed_seconds,
+    is_deleted,
     source_topic,
     source_partition,
     source_offset,
@@ -27,8 +28,8 @@ select
 from {{ ref('stg_order_intelligence') }}
 
 {% if is_incremental() %}
-where projected_at > (
-    select coalesce(max(last_projected_at), '1900-01-01'::timestamp)
+where projected_at >= (
+    select coalesce(max(last_projected_at), '1900-01-01'::timestamptz)
     from {{ this }}
 )
 {% endif %}

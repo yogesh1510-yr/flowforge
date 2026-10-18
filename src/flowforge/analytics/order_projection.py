@@ -115,14 +115,21 @@ def transform_order_event(
     if missing:
         raise ValueError(f"Order payload missing fields: {', '.join(missing)}")
 
+    created_at = _parse_timestamp(record["created_at"])
+    updated_at = _parse_timestamp(record["updated_at"])
+
     result = {
         "order_id": UUID(record["id"]),
         "order_number": record["order_number"],
         "customer_id": UUID(record["customer_id"]),
         "status": record["status"],
         "currency": record["currency"],
-        "created_at": _parse_timestamp(record["created_at"]),
-        "updated_at": _parse_timestamp(record["updated_at"]),
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "order_age_seconds": max(
+            Decimal("0"),
+            Decimal(str((updated_at - created_at).total_seconds())),
+        ),
         "source_lsn": int(source["lsn"]) if source.get("lsn") is not None else None,
         "source_txid": int(source["txId"]) if source.get("txId") is not None else None,
         "source_topic": topic,

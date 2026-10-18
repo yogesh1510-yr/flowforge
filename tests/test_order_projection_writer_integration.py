@@ -1,4 +1,4 @@
-"""Transactional integration tests for the isolated PostgreSQL order projection."""
+"""Transactional integration tests for the shared PostgreSQL order projection."""
 
 import os
 from uuid import uuid4
@@ -45,6 +45,7 @@ def make_record(order_id, *, status, lsn, offset, deleted=False):
         "shipping_amount": Decimal("10.00"),
         "discount_amount": Decimal("0.00"),
         "total_amount": Decimal("128.00"),
+        "order_age_seconds": Decimal("0.000"),
         "created_at": now,
         "updated_at": now,
         "source_lsn": lsn,
@@ -61,7 +62,7 @@ def read_order(connection, order_id):
         cursor.execute(
             """
             SELECT status, source_lsn, source_offset, is_deleted
-            FROM analytics.order_state_test
+            FROM analytics.order_state
             WHERE order_id = %s
             """,
             (order_id,),

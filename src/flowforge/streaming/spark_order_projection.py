@@ -1,4 +1,4 @@
-"""Project Debezium order events into the isolated PostgreSQL order-state table."""
+"""Project Debezium order events into the shared PostgreSQL order-state table."""
 
 import os
 
@@ -12,7 +12,7 @@ KAFKA = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TOPIC = os.getenv("KAFKA_TOPIC", "flowforge.public.orders")
 CHECKPOINT = os.getenv(
     "ORDER_PROJECTION_CHECKPOINT",
-    "/tmp/flowforge-spark-checkpoints/order-projection-test",
+    "/opt/spark-data/checkpoints/order-projection",
 )
 
 DB_HOST = os.getenv("SINK_DB_HOST", "postgres")
@@ -21,7 +21,7 @@ DB_NAME = os.getenv("SINK_DB_NAME", "flowforge")
 DB_USER = os.getenv("SINK_DB_USER", "flowforge")
 DB_PASSWORD = os.getenv("SINK_DB_PASSWORD", "flowforge_dev_only")
 
-# This first version is deliberately restricted to the isolated test table.
+# The target is fixed to analytics.order_state by the projection writer SQL.
 DB_DSN = (
     f"host={DB_HOST} port={DB_PORT} dbname={DB_NAME} "
     f"user={DB_USER} password={DB_PASSWORD}"
@@ -86,7 +86,7 @@ query = (
 )
 
 print(
-    f"Projecting {TOPIC} into analytics.order_state_test. "
+    f"Projecting {TOPIC} into analytics.order_state. "
     f"Checkpoint: {CHECKPOINT}. Press Ctrl+C to stop."
 )
 query.awaitTermination()

@@ -1,18 +1,18 @@
-"""PostgreSQL writer for the isolated order-state projection."""
+"""PostgreSQL writer for the shared order-state projection."""
 
 from typing import Any
 
 UPSERT_SQL = """
-INSERT INTO analytics.order_state_test (
+INSERT INTO analytics.order_state (
     order_id, order_number, customer_id, status, currency,
     subtotal, tax_amount, shipping_amount, discount_amount, total_amount,
-    created_at, updated_at, source_lsn, source_txid,
+    order_age_seconds, created_at, updated_at, source_lsn, source_txid,
     source_topic, source_partition, source_offset, is_deleted, projected_at
 )
 VALUES (
     %(order_id)s, %(order_number)s, %(customer_id)s, %(status)s, %(currency)s,
     %(subtotal)s, %(tax_amount)s, %(shipping_amount)s,
-    %(discount_amount)s, %(total_amount)s,
+    %(discount_amount)s, %(total_amount)s, %(order_age_seconds)s,
     %(created_at)s, %(updated_at)s, %(source_lsn)s, %(source_txid)s,
     %(source_topic)s, %(source_partition)s, %(source_offset)s,
     %(is_deleted)s, now()
@@ -27,6 +27,7 @@ ON CONFLICT (order_id) DO UPDATE SET
     shipping_amount = EXCLUDED.shipping_amount,
     discount_amount = EXCLUDED.discount_amount,
     total_amount = EXCLUDED.total_amount,
+    order_age_seconds = EXCLUDED.order_age_seconds,
     created_at = EXCLUDED.created_at,
     updated_at = EXCLUDED.updated_at,
     source_lsn = EXCLUDED.source_lsn,
@@ -37,20 +38,20 @@ ON CONFLICT (order_id) DO UPDATE SET
     is_deleted = EXCLUDED.is_deleted,
     projected_at = now()
 WHERE
-    analytics.order_state_test.source_lsn IS NOT NULL
+    analytics.order_state.source_lsn IS NOT NULL
     AND EXCLUDED.source_lsn IS NOT NULL
     AND (
         EXCLUDED.source_lsn >
-            analytics.order_state_test.source_lsn
+            analytics.order_state.source_lsn
         OR (
             EXCLUDED.source_lsn =
-                analytics.order_state_test.source_lsn
+                analytics.order_state.source_lsn
             AND EXCLUDED.source_topic =
-                analytics.order_state_test.source_topic
+                analytics.order_state.source_topic
             AND EXCLUDED.source_partition =
-                analytics.order_state_test.source_partition
+                analytics.order_state.source_partition
             AND EXCLUDED.source_offset >
-                analytics.order_state_test.source_offset
+                analytics.order_state.source_offset
         )
     )
 """

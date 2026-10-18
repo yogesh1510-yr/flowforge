@@ -2,7 +2,7 @@
 
 FlowForge is an engineering project for building a real-time order intelligence platform that combines operational order management, inventory control, fulfillment workflows, event tracking, change data capture (CDC), streaming, and analytics.
 
-The project is being developed incrementally, starting with a containerized FastAPI and PostgreSQL foundation before expanding toward an event-driven data platform using Kafka, Debezium, Python, Spark, and Airflow.
+The project is being developed incrementally. The operational API is backed by PostgreSQL; the local learning stack now also includes Kafka, Debezium, a Spark CDC projection, dbt models, and Airflow orchestration.
 
 The primary goal is to demonstrate how a backend operational system can evolve into a reliable, observable, and analytics-ready data platform.
 
@@ -51,7 +51,7 @@ The initial operational platform provides:
 - Docker-based local development.
 - Automated tests, request logging, and health checks.
 
-Kafka, Debezium, Spark, and Airflow are planned extensions. They are part of the target architecture, not prerequisites for running the current API.
+The API and database form the operational foundation. The CDC and analytics services are now wired for local learning, but still need an end-to-end manual run and operational hardening before they should be treated as production-ready.
 
 ## Project Goals
 
@@ -104,8 +104,12 @@ Kafka, Debezium, Spark, and Airflow are planned extensions. They are part of the
 | Health checks | API liveness and database readiness endpoints |
 | Database | PostgreSQL, SQLAlchemy, and Alembic migrations |
 | Development | Docker Compose, seed data, and automated tests |
+| Change data capture | Debezium PostgreSQL connector registered against the orders table |
+| Streaming | Kafka topic and Spark Structured Streaming order-state projection |
+| Analytics | dbt staging and marts against the shared analytics projection |
+| Orchestration | Airflow DAG that runs `dbt build` hourly or on demand |
 
-The current platform is an operational backend with event-recording capabilities. A distributed streaming pipeline and analytical processing layer remain planned development work.
+The operational backend and a first local CDC-to-analytics path are implemented. The pipeline is intentionally small: Debezium captures orders, Spark projects them to PostgreSQL, and dbt builds analytical tables. Airflow schedules dbt; Kafka carries the events.
 
 ---
 
@@ -122,10 +126,11 @@ The current platform is an operational backend with event-recording capabilities
 | Docker | Containerized application runtime |
 | Docker Compose | Local multi-service orchestration |
 | Pytest | Automated testing |
-| Apache Kafka | Planned event streaming |
-| Debezium | Planned database change data capture |
-| Apache Spark | Planned large-scale data processing |
-| Apache Airflow | Planned workflow orchestration |
+| Apache Kafka | Local event transport for PostgreSQL change events |
+| Debezium | Captures order-table changes from PostgreSQL logical replication |
+| Apache Spark | Projects order CDC events into an analytics state table |
+| dbt | Builds and tests staging and mart models from that projection |
+| Apache Airflow | Schedules dbt model builds |
 
 ---
 
@@ -202,7 +207,7 @@ The API contains separate schema, repository, and service layers. The service la
         analytical workflows
 ```
 
-The target architecture will be introduced incrementally. The diagram represents the intended direction rather than a claim that all components are currently deployed.
+The local Compose stack runs this first path. Airflow schedules the finite dbt build; Spark remains a long-running streaming service and Kafka is the event transport.
 
 ---
 
@@ -211,15 +216,24 @@ The target architecture will be introduced incrementally. The diagram represents
 ```text
 flowforge/
 ├── compose.yml
+├── airflow/
+│   └── dags/
+├── flowforge_analytics/
+│   ├── models/
+│   └── snapshots/
 ├── .dockerignore
 ├── .gitignore
 ├── pyproject.toml
 ├── README.md
 ├── infra/
 │   └── docker/
-│       └── api.Dockerfile
+│       ├── api.Dockerfile
+│       ├── airflow.Dockerfile
+│       └── spark.Dockerfile
 ├── docs/
-│   └── database-architecture-plan.pdf
+│   ├── database-architecture-plan.pdf
+│   ├── learning-guide.md
+│   └── manual-test-runbook.md
 ├── migrations/
 │   ├── env.py
 │   └── versions/
@@ -249,7 +263,9 @@ flowforge/
 │       │   └── session.py
 │       ├── models/
 │       ├── repositories/
-│       └── services/
+│       ├── services/
+│       ├── analytics/
+│       └── streaming/
 └── tests/
 ```
 
@@ -293,15 +309,13 @@ python -m pip install -e ".[dev]"
 
 ### 3. Configure environment variables
 
-Create a local `.env` file in the repository root:
+Create a local `.env` file from the example:
 
-```dotenv
-POSTGRES_DB=flowforge
-POSTGRES_USER=flowforge
-POSTGRES_PASSWORD=flowforge_dev_only
+```bash
+cp .env.example .env
 ```
 
-These values are for local development only. Use strong, externally managed secrets in deployed environments.
+The example values are for local development only. Use strong, externally managed secrets in deployed environments.
 
 The `.env` file is excluded from Git.
 
@@ -317,12 +331,15 @@ Check service status:
 docker compose ps
 ```
 
-The Compose configuration starts PostgreSQL and the API. PostgreSQL has a health check, and API startup waits for the database to become healthy.
+The Compose configuration starts PostgreSQL, applies Alembic migrations, then starts the API, Kafka, Kafka Connect, the Debezium connector registration job, Spark, and Airflow. Connector registration waits for Kafka Connect and the migration job. The API waits for migrations to finish.
 
 The local ports are:
 
 - API: `http://localhost:8000`
+- Airflow: `http://localhost:8080` (credentials from `.env`)
 - PostgreSQL: `127.0.0.1:5434`
+- Kafka: `127.0.0.1:19092` (external client listener)
+- Kafka Connect: `http://127.0.0.1:8083`
 
 The PostgreSQL container uses a named Docker volume so that ordinary container recreation does not remove persisted data.
 
@@ -372,22 +389,18 @@ Set the database URL in your current shell before running host-side migration co
 export DATABASE_URL="postgresql+psycopg://flowforge:flowforge_dev_only@127.0.0.1:5434/flowforge"
 ```
 
-Apply migrations:
+Compose applies migrations automatically. To practice Alembic from the host, set the database URL and inspect the current migration:
 
 ```bash
-alembic upgrade head
+alembic current
 ```
+
+You can also apply a migration explicitly with `alembic upgrade head`; it is safe to run when the database is already current.
 
 Check whether model definitions and migration metadata are consistent:
 
 ```bash
 alembic check
-```
-
-Inspect the current migration revision:
-
-```bash
-alembic current
 ```
 
 The API container and host-side commands use different database hostnames because they run in different network environments.
@@ -407,6 +420,43 @@ python scripts/seed.py
 The seed script is intended to support repeatable local demonstrations. Review the script before running it against any non-development database.
 
 After seeding, inspect the generated records using the API endpoints and dashboard.
+
+---
+
+## Manually Exercise the CDC and Analytics Flow
+
+Start the stack and wait for `api`, `spark-projection`, `airflow-webserver`, and
+`airflow-scheduler` to become healthy. The `migrate` and `debezium-register`
+services are one-shot jobs and should exit successfully.
+
+1. Open `http://localhost:8000/docs` and create an order using an active customer
+   and product. If the database is empty, seed it first with
+   `DATABASE_URL=postgresql+psycopg://flowforge:flowforge_dev_only@127.0.0.1:5434/flowforge python scripts/seed.py`.
+   The order response includes the order ID and order-item ID.
+2. Confirm and process the order through the fulfillment and order status
+   endpoints. Each committed change to `public.orders` is captured by Debezium.
+3. Follow `docker compose logs -f spark-projection`. Spark reads
+   `flowforge.public.orders` and upserts the latest row into
+   `analytics.order_state`.
+4. Query `GET /order-intelligence/by-id/{order_id}`. This endpoint reads the same
+   projection table Spark writes.
+5. Open Airflow at `http://localhost:8080`, trigger `flowforge_analytics`, and
+   inspect the `dbt_source_freshness` and `dbt_build` task logs. dbt builds the
+   staging views and order marts from `analytics.order_state`.
+
+The projection is asynchronous, so allow a short delay between committing an
+order change and querying order intelligence. Kafka Connect and Spark logs are
+the first places to inspect if the projection does not advance. Airflow metadata
+uses the local FlowForge PostgreSQL database to keep the demo stack compact;
+production deployments should isolate Airflow's metadata database.
+
+To run dbt directly from the host, install the optional adapter and use the
+profile in `flowforge_analytics/profiles.yml`:
+
+```bash
+python -m pip install -e ".[analytics]"
+dbt build --project-dir flowforge_analytics --profiles-dir flowforge_analytics
+```
 
 ---
 
@@ -692,24 +742,24 @@ The credentials shown in local development examples are not suitable for product
 
 ### Phase 2 — Event streaming and CDC
 
-- [ ] Introduce Kafka into the development environment
-- [ ] Configure Debezium connectors for PostgreSQL
-- [ ] Define event topics and message contracts
+- [x] Introduce Kafka into the development environment
+- [x] Register a Debezium connector for PostgreSQL orders
+- [x] Define an initial order CDC topic and typed projection contract
 - [ ] Validate change capture and event delivery
 - [ ] Explore duplicate delivery, ordering, and recovery behavior
 
 ### Phase 3 — Stream processing and analytics
 
-- [ ] Build Python event consumers
-- [ ] Introduce analytical data models
-- [ ] Add Spark processing workflows
-- [ ] Develop operational and business metrics
+- [x] Build a Python consumer with malformed-message DLQ handling
+- [x] Introduce an analytics order-state table and dbt models
+- [x] Add a Spark streaming projection workflow
+- [x] Develop initial order status and value marts
 - [ ] Validate data quality and reconciliation
 
 ### Phase 4 — Orchestration and production hardening
 
-- [ ] Introduce Airflow orchestration
-- [ ] Add scheduled data quality checks
+- [x] Introduce an Airflow DAG for dbt builds
+- [x] Add scheduled data quality checks
 - [ ] Improve metrics, tracing, and alerting
 - [ ] Define backup and recovery procedures
 - [ ] Add deployment automation and integration environments
@@ -722,6 +772,8 @@ The roadmap describes intended work. Individual milestones should be marked comp
 ## Architecture Documentation
 
 - [Database Architecture Plan](docs/database-architecture-plan.pdf) — Target database schema, table relationships, architectural decisions, implementation roadmap, and migration checklist.
+- [Learning Guide](docs/learning-guide.md) — How the code layers and data-platform technologies fit together.
+- [Manual Test Runbook](docs/manual-test-runbook.md) — Exercise reservations, fulfillment, CDC, Spark, dbt, and Airflow end to end.
 
 ---
 
@@ -740,6 +792,4 @@ FlowForge is being developed around the following principles:
 
 ## Project Status
 
-FlowForge currently provides an operational order and inventory API backed by PostgreSQL, with containerized local development, tests, order event records, inventory movement history, and operational dashboard endpoints.
-
-The next architectural step is to connect the operational database to a change-data-capture and event-streaming pipeline, then build analytical processing and orchestration around those events.
+FlowForge provides an operational order and inventory API backed by PostgreSQL, plus a local Debezium/Kafka/Spark/dbt/Airflow learning path. The next step is to follow the manual runbook and observe delivery, replay, data quality, and recovery behavior.

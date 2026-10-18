@@ -25,3 +25,6 @@ htmlcov/
 *.log
 data/local/
 EOF
+
+docs/
+docs/*

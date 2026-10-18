@@ -47,6 +47,8 @@ def create_reservation(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except reservation_service.InsufficientStockError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except reservation_service.ReservationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IntegrityError as exc:

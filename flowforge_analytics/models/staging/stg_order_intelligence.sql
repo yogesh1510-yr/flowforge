@@ -12,8 +12,9 @@ select
     created_at,
     updated_at,
     order_age_seconds,
+    is_deleted,
     source_topic,
     source_partition,
     source_offset,
     projected_at
-from {{ source('flowforge_analytics', 'order_intelligence_test') }}
+from {{ source('flowforge_analytics', 'order_state') }}

@@ -2,15 +2,17 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from flowforge.core.enums import (
     InventoryMovementType,
+    OrderStatus,
     ReservationStatus,
 )
 from flowforge.models.inventory import InventoryReservation
+from flowforge.models.order import Order, OrderItem
 from flowforge.repositories import inventory as inventory_repository
 from flowforge.repositories import reservation as reservation_repository
 
@@ -45,6 +47,23 @@ def create_reservation(
             raise ValueError("expires_at must be in the future")
 
     try:
+        # Serialize manual reservations with order confirmation. Both paths
+        # lock the order first, avoiding a partial reservation during allocation.
+        order_and_item = session.execute(
+            select(Order, OrderItem)
+            .join(OrderItem, OrderItem.order_id == Order.id)
+            .where(OrderItem.id == order_item_id)
+            .with_for_update(of=Order)
+        ).one_or_none()
+        if order_and_item is None:
+            raise ReservationNotFoundError("Order item not found")
+
+        order, order_item = order_and_item
+        if order.status != OrderStatus.PENDING:
+            raise ReservationConflictError(
+                "Reservations can only be added to pending orders"
+            )
+
         inventory = inventory_repository.get_inventory_by_id(
             session,
             inventory_id,
@@ -52,6 +71,22 @@ def create_reservation(
         )
         if inventory is None:
             raise ReservationNotFoundError("Inventory not found")
+
+        if inventory.product_id != order_item.product_id:
+            raise ReservationConflictError(
+                "Inventory product does not match the order item"
+            )
+
+        already_reserved = session.scalar(
+            select(func.coalesce(func.sum(InventoryReservation.quantity), 0)).where(
+                InventoryReservation.order_item_id == order_item_id,
+                InventoryReservation.status == ReservationStatus.RESERVED,
+            )
+        )
+        if already_reserved + quantity > order_item.quantity:
+            raise ReservationConflictError(
+                "Reservation would exceed the order item quantity"
+            )
 
         available = inventory.on_hand_quantity - inventory.reserved_quantity
         if quantity > available:
@@ -69,7 +104,12 @@ def create_reservation(
         session.refresh(reservation)
         return reservation
 
-    except (ReservationNotFoundError, InsufficientStockError, ValueError):
+    except (
+        ReservationNotFoundError,
+        ReservationConflictError,
+        InsufficientStockError,
+        ValueError,
+    ):
         session.rollback()
         raise
     except IntegrityError:
