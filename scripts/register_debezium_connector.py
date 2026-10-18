@@ -24,7 +24,7 @@ config = {
     "publication.autocreate.mode": "filtered",
     "schema.include.list": "public",
     "table.include.list": "public.orders",
-    "snapshot.mode": "initial",
+    "snapshot.mode": "initial", 
     "decimal.handling.mode": "precise",
     "tombstones.on.delete": "false",
 }
